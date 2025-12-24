@@ -1,0 +1,5 @@
+{
+  "name": "DistillJar",
+  "description": "A high-performance research paper processor and RAG system utilizing FAISS-grade vector storage and hierarchical matrix compression.",
+  "requestFramePermissions": []
+}

@@ -206,8 +206,8 @@ const App: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsExitingSplash(true);
-      setTimeout(() => setShowSplash(false), 450);
-    }, 850);
+      setTimeout(() => setShowSplash(false), 220);
+    }, 380);
     return () => clearTimeout(timer);
   }, []);
 

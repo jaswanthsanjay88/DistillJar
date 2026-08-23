@@ -19,9 +19,7 @@
         "minHeight": 640,
         "resizable": true,
         "fullscreen": false,
-        "theme": "Dark",
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "theme": "Dark"
       }
     ],
     "security": {
@@ -40,30 +38,18 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "Local Research Paper Intelligence & MCP Server",
-    "longDescription": "DistillJar is a 100% offline, zero-telemetry research paper distillation workspace and Model Context Protocol (MCP) server.",
+    "longDescription": "DistillJar is an offline research paper distillation workspace and Model Context Protocol (MCP) server.",
     "macOS": {
-      "frameworks": [],
-      "minimumSystemVersion": "10.15",
-      "hardenedRuntime": true,
-      "entitlements": null
+      "minimumSystemVersion": "10.15"
     },
     "windows": {
-      "wix": {
-        "language": "en-US"
-      },
       "nsis": {
-        "oneClick": false,
-        "perMachine": false,
-        "allowToChangeInstallationDirectory": true
+        "installMode": "currentUser"
       }
     },
     "linux": {
-      "deb": {
-        "depends": []
-      },
-      "appimage": {
-        "bundleMediaFramework": false
-      }
+      "deb": {},
+      "appimage": {}
     }
   }
 }

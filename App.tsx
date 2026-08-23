@@ -3,7 +3,7 @@ import { ProcessedPaper, ChatMessage, ProcessJob, OllamaConfig } from './types';
 import { parsePdf } from './services/pdfService';
 import { llamaRagQuery, checkOllamaStatus } from './services/ollamaService';
 import { compressDocument } from './services/compressionService';
-import { getPaperFromDB, savePaperToDB, getAllPapersFromDB, deletePaperFromDB, getStorageUsage, clearDB } from './services/storageService';
+import { initStorage, getPaperFromDB, savePaperToDB, getAllPapersFromDB, deletePaperFromDB, getStorageUsage, clearDB } from './services/storageService';
 import { searchExternal, SearXNGResult } from './services/searxngService';
 import { buildVectorIndex, VectorIndex } from './services/llamaVectorService';
 import showdown from 'showdown';
@@ -129,8 +129,27 @@ const MoonIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
 const GlobeIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" />
-    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10 15.3 15.3 0 0 1 4-10z" />
   </svg>
+);
+
+// --- AUTHENTIC APPLE BLUE MINIMAL TOGGLE SWITCH (UISwitch) ---
+const IOSToggle: React.FC<{ checked: boolean; onChange: () => void }> = ({ checked, onChange }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    onClick={onChange}
+    className={`relative inline-flex h-[31px] w-[51px] shrink-0 cursor-pointer rounded-full p-[2px] transition-colors duration-200 ease-in-out focus:outline-none ${
+      checked ? 'bg-[#007AFF]' : 'bg-[#E9E9EB] dark:bg-[#39393D]'
+    }`}
+  >
+    <span
+      className={`pointer-events-none inline-block h-[27px] w-[27px] transform rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,0.15),0_3px_1px_rgba(0,0,0,0.06)] transition-transform duration-200 ease-in-out ${
+        checked ? 'translate-x-[20px]' : 'translate-x-0'
+      }`}
+    />
+  </button>
 );
 
 interface EnhancedMessage extends ChatMessage {
@@ -703,7 +722,7 @@ const App: React.FC = () => {
               <button
                 onClick={() => setSearchEnabled(!searchEnabled)}
                 className={`text-[12px] px-2.5 py-1 rounded-full font-medium transition-colors ${
-                  searchEnabled ? 'bg-[#EDEDEA] text-black dark:bg-[#EDEDEA] dark:text-black' : 'bg-[#8E8E93]/20 text-[#8E8E93]'
+                  searchEnabled ? 'bg-[#007AFF] text-white shadow-sm' : 'bg-[#8E8E93]/20 text-[#8E8E93]'
                 }`}
               >
                 Web
@@ -893,14 +912,10 @@ const App: React.FC = () => {
               }`}>
                 <div className="p-3.5 flex items-center justify-between">
                   <span>Dark Appearance</span>
-                  <button
-                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                    className={`w-12 h-7 rounded-full p-0.5 transition-colors flex items-center ${
-                      theme === 'dark' ? 'bg-[#EDEDEA] dark:bg-[#EDEDEA] justify-end' : 'bg-[#E5E5EA] justify-start'
-                    }`}
-                  >
-                    <div className="w-6 h-6 rounded-full bg-white shadow-md" />
-                  </button>
+                  <IOSToggle
+                    checked={theme === 'dark'}
+                    onChange={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  />
                 </div>
               </div>
 

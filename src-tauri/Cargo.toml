@@ -1,6 +1,6 @@
 [package]
 name = "distilljar"
-version = "1.0.2"
+version = "1.0.3"
 description = "DistillJar - Local Research Paper Intelligence & Distillation Workspace"
 authors = ["DistillJar Team"]
 edition = "2021"

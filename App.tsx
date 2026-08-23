@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ProcessedPaper, ChatMessage, ProcessJob, OllamaConfig } from './types';
+import { ProcessedPaper, ChatMessage, ProcessJob, AIModelConfig, AIProvider } from './types';
 import { parsePdf } from './services/pdfService';
-import { llamaRagQuery, checkOllamaStatus } from './services/ollamaService';
+import { llamaRagQuery, checkModelStatus, DEFAULT_CONFIG } from './services/ollamaService';
 import { compressDocument } from './services/compressionService';
 import { initStorage, getPaperFromDB, savePaperToDB, getAllPapersFromDB, deletePaperFromDB, getStorageUsage, clearDB } from './services/storageService';
 import { searchExternal, SearXNGResult } from './services/searxngService';
@@ -139,19 +139,60 @@ const DownloadIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   </svg>
 );
 
-// --- HELPER: PARSE ARXIV / DOI IDS ---
-const parseArxivId = (input: string): string | null => {
+const RefreshIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+  </svg>
+);
+
+const KeyIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="7.5" cy="15.5" r="5.5" /><path d="m21 2-9.6 9.6" /><path d="m15.5 7.5 3 3L22 7l-3-3" />
+  </svg>
+);
+
+const SidebarToggleIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 3v18" />
+  </svg>
+);
+
+const AssistantToggleIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M15 3v18" />
+  </svg>
+);
+
+// --- HELPER: PARSE ARXIV / DOI / WEB URL TARGETS ---
+const parseIngestTarget = (input: string): { type: 'arxiv' | 'url'; value: string; label: string } | null => {
   const trimmed = input.trim();
-  const urlMatch = trimmed.match(/arxiv\.org\/(?:abs|pdf)\/([0-9]+\.[0-9]+(?:v[0-9]+)?)/i);
-  if (urlMatch) return urlMatch[1];
+  if (!trimmed) return null;
+
+  const urlMatch = trimmed.match(/arxiv\.org\/(?:abs|pdf|html)\/([0-9]+\.[0-9]+(?:v[0-9]+)?)/i);
+  if (urlMatch) return { type: 'arxiv', value: urlMatch[1], label: `arXiv:${urlMatch[1]}` };
 
   const doiMatch = trimmed.match(/10\.48550\/arXiv\.([0-9]+\.[0-9]+(?:v[0-9]+)?)/i);
-  if (doiMatch) return doiMatch[1];
+  if (doiMatch) return { type: 'arxiv', value: doiMatch[1], label: `arXiv:${doiMatch[1]}` };
 
   const directMatch = trimmed.match(/^([0-9]{4}\.[0-9]{4,5}(?:v[0-9]+)?)$/i);
-  if (directMatch) return directMatch[1];
+  if (directMatch) return { type: 'arxiv', value: directMatch[1], label: `arXiv:${directMatch[1]}` };
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      const u = new URL(trimmed);
+      let name = u.pathname.split('/').filter(Boolean).pop() || u.hostname;
+      if (name.includes('?')) name = name.split('?')[0];
+      return { type: 'url', value: trimmed, label: name.length > 28 ? name.substring(0, 28) + '...' : name };
+    } catch {}
+  }
 
   return null;
+};
+
+// Backward compatibility helper
+const parseArxivId = (input: string): string | null => {
+  const t = parseIngestTarget(input);
+  return t && t.type === 'arxiv' ? t.value : null;
 };
 
 // --- SPOTLIGHT-STYLE COMMAND PALETTE (⌘K / Ctrl+K) ---
@@ -163,9 +204,9 @@ const CommandPalette: React.FC<{
   onUploadClick: () => void;
   onOpenSettings: () => void;
   onSwitchView: (mode: 'synthesis' | 'matrix' | 'chunks') => void;
-  onArxivIngest: (arxivId: string) => void;
+  onUniversalIngest: (target: { type: 'arxiv' | 'url'; value: string; label: string }) => void;
   theme: 'dark' | 'light';
-}> = ({ isOpen, onClose, papers, onSelectPaper, onUploadClick, onOpenSettings, onSwitchView, onArxivIngest, theme }) => {
+}> = ({ isOpen, onClose, papers, onSelectPaper, onUploadClick, onOpenSettings, onSwitchView, onUniversalIngest, theme }) => {
   const [search, setSearch] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -179,7 +220,7 @@ const CommandPalette: React.FC<{
 
   if (!isOpen) return null;
 
-  const detectedArxiv = parseArxivId(search);
+  const detectedTarget = parseIngestTarget(search);
   const filtered = papers.filter(p => p.filename.toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -201,8 +242,8 @@ const CommandPalette: React.FC<{
             onKeyDown={(e) => {
               if (e.key === 'Escape') onClose();
               if (e.key === 'Enter') {
-                if (detectedArxiv) {
-                  onArxivIngest(detectedArxiv);
+                if (detectedTarget) {
+                  onUniversalIngest(detectedTarget);
                   onClose();
                 } else if (filtered.length > 0) {
                   onSelectPaper(filtered[0]);
@@ -210,7 +251,7 @@ const CommandPalette: React.FC<{
                 }
               }
             }}
-            placeholder="Search papers, arXiv URL/ID, actions... (ESC to exit)"
+            placeholder="Search papers, paste arXiv/Web URL, actions... (ESC to exit)"
             className="w-full bg-transparent focus:outline-none text-[16px] placeholder:text-[#8E8E93]"
           />
           <kbd className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-[#8E8E93]/20 text-[#8E8E93] shrink-0">ESC</kbd>
@@ -218,17 +259,17 @@ const CommandPalette: React.FC<{
 
         {/* Action & Results List */}
         <div className="max-h-80 overflow-y-auto p-2 space-y-1 custom-scrollbar text-[14px]">
-          {/* 1-Tap arXiv Action */}
-          {detectedArxiv && (
+          {/* 1-Tap Universal Ingest Action */}
+          {detectedTarget && (
             <button
-              onClick={() => { onArxivIngest(detectedArxiv); onClose(); }}
+              onClick={() => { onUniversalIngest(detectedTarget); onClose(); }}
               className="w-full text-left p-2.5 rounded-xl bg-[#007AFF] text-white flex items-center justify-between font-medium active:scale-[0.98] transition-all mb-1"
             >
-              <span className="flex items-center gap-2">
-                <DownloadIcon className="w-4 h-4" />
-                <span>1-Tap Ingest arXiv: <strong>{detectedArxiv}</strong></span>
+              <span className="flex items-center gap-2 truncate">
+                <DownloadIcon className="w-4 h-4 shrink-0" />
+                <span className="truncate">1-Tap Ingest: <strong>{detectedTarget.label}</strong></span>
               </span>
-              <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full font-mono">Press ↵</span>
+              <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full font-mono shrink-0">Press ↵</span>
             </button>
           )}
 
@@ -427,10 +468,24 @@ const App: React.FC = () => {
   const [chunkSearch, setChunkSearch] = useState("");
   const [sidebarFilter, setSidebarFilter] = useState("");
 
-  const [ollamaConfig, setOllamaConfig] = useState<OllamaConfig>(() => {
+  const [ollamaConfig, setOllamaConfig] = useState<AIModelConfig>(() => {
     const saved = localStorage.getItem('OLLAMA_CONFIG');
-    return saved ? JSON.parse(saved) : { baseUrl: 'http://localhost:11434', model: 'llama3.2:latest' };
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return {
+          provider: parsed.provider || 'ollama',
+          baseUrl: parsed.baseUrl || 'http://localhost:11434',
+          model: parsed.model || 'llama3.2:latest',
+          apiKey: parsed.apiKey || ''
+        };
+      } catch {}
+    }
+    return DEFAULT_CONFIG;
   });
+
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
 
   // Global Keyboard Shortcuts (⌘K, ⌘O, ⌘1, ⌘2, ⌘3, ⌘,)
   useEffect(() => {
@@ -485,39 +540,61 @@ const App: React.FC = () => {
     setTimeout(() => setHighlightedPage(null), 3000);
   };
 
-  // 1-Tap arXiv Ingest Handler (CORS-Free Proxy Pipeline)
-  const handleArxivIngest = async (arxivId: string) => {
+  // 1-Tap Universal Ingest Handler (arXiv & Web URLs)
+  const handleUniversalIngest = async (target: { type: 'arxiv' | 'url'; value: string; label: string }) => {
     setIsFetchingArxiv(true);
-    const cleanId = arxivId.trim().replace(/\.pdf$/i, '');
+    const targetVal = target.value.trim();
     try {
       let resp: Response | null = null;
-      
-      // 1. Try Vite loopback proxy first (CORS-free)
-      try {
-        resp = await fetch(`/api/arxiv-pdf/${cleanId}.pdf`);
-      } catch {
-        resp = null;
-      }
+      let targetFilename = `doc_${Date.now()}.pdf`;
 
-      // 2. Try FastAPI backend proxy if Vite proxy fails
-      if (!resp || !resp.ok) {
+      if (target.type === 'arxiv') {
+        const cleanId = targetVal.replace(/\.pdf$/i, '');
+        targetFilename = `arxiv_${cleanId}.pdf`;
+
+        // 1. Try FastAPI backend proxy first (tested & verified binary stream)
         try {
           resp = await fetch(`http://localhost:8000/api/fetch-arxiv?arxiv_id=${encodeURIComponent(cleanId)}`);
         } catch {
           resp = null;
         }
+
+        // 2. Try Vite loopback proxy if backend proxy fails
+        if (!resp || !resp.ok) {
+          try {
+            resp = await fetch(`/api/arxiv-pdf/${cleanId}.pdf`);
+          } catch {
+            resp = null;
+          }
+        }
+
+        // 3. Try direct fetch as last resort
+        if (!resp || !resp.ok) {
+          try {
+            resp = await fetch(`https://arxiv.org/pdf/${cleanId}.pdf`);
+          } catch {
+            resp = null;
+          }
+        }
+      } else {
+        // Universal Web URL Ingestion
+        const cleanName = target.label.replace(/[^a-zA-Z0-9._-]/g, '_');
+        targetFilename = cleanName.endsWith('.pdf') || cleanName.endsWith('.md') ? cleanName : `${cleanName}.html`;
+
+        try {
+          resp = await fetch(`http://localhost:8000/api/fetch-url?url=${encodeURIComponent(targetVal)}`);
+        } catch {
+          resp = await fetch(targetVal, { mode: 'cors' }).catch(() => null);
+        }
       }
 
-      // 3. Try direct fetch as last resort
-      if (!resp || !resp.ok) {
-        resp = await fetch(`https://arxiv.org/pdf/${cleanId}.pdf`);
-      }
-
-      if (!resp || !resp.ok) throw new Error(`HTTP fetch failed`);
+      if (!resp || !resp.ok) throw new Error(`Fetch failed (${resp ? resp.status : 'offline'})`);
       const blob = await resp.blob();
-      if (blob.size < 500) throw new Error("Downloaded file is empty or blocked.");
+      if (!blob || blob.size < 200) {
+        throw new Error(`Downloaded file is 0 KB or incomplete (${blob ? blob.size : 0} bytes).`);
+      }
 
-      const file = new File([blob], `arxiv_${cleanId}.pdf`, { type: 'application/pdf' });
+      const file = new File([blob], targetFilename, { type: blob.type || 'application/octet-stream' });
       const newJob: ProcessJob = {
         id: Math.random().toString(36).substring(2, 9),
         file,
@@ -527,13 +604,62 @@ const App: React.FC = () => {
       setQueue(prev => [newJob, ...prev]);
       setSidebarFilter("");
       setShowCommandPalette(false);
-    } catch (e) {
-      console.warn("arXiv fetch failed:", e);
-      alert(`Could not automatically download arXiv paper (${cleanId}). You can download https://arxiv.org/pdf/${cleanId}.pdf and drop it into DistillJar.`);
+    } catch (e: any) {
+      console.warn("Universal ingest failed:", e);
+      alert(`Could not automatically download (${targetVal}): ${e.message}\nTip: You can download the document directly and drop it into DistillJar.`);
     } finally {
       setIsFetchingArxiv(false);
     }
   };
+
+  const handleArxivIngest = (arxivId: string) => handleUniversalIngest({ type: 'arxiv', value: arxivId, label: `arXiv:${arxivId}` });
+
+  // Horizontally Resizable Panes State
+  const [libraryWidth, setLibraryWidth] = useState<number>(() => {
+    return Number(localStorage.getItem('DISTILLJAR_LIB_WIDTH')) || 320;
+  });
+  const [assistantWidth, setAssistantWidth] = useState<number>(() => {
+    return Number(localStorage.getItem('DISTILLJAR_ASST_WIDTH')) || 360;
+  });
+  const [isLibraryCollapsed, setIsLibraryCollapsed] = useState<boolean>(false);
+  const [isAssistantCollapsed, setIsAssistantCollapsed] = useState<boolean>(false);
+  const [isDraggingLibrary, setIsDraggingLibrary] = useState<boolean>(false);
+  const [isDraggingAssistant, setIsDraggingAssistant] = useState<boolean>(false);
+
+  // Mouse Move & Up Listeners for Horizontal Resizing
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingLibrary) {
+        const newWidth = Math.max(220, Math.min(600, e.clientX));
+        setLibraryWidth(newWidth);
+        localStorage.setItem('DISTILLJAR_LIB_WIDTH', String(newWidth));
+      } else if (isDraggingAssistant) {
+        const newWidth = Math.max(260, Math.min(750, window.innerWidth - e.clientX));
+        setAssistantWidth(newWidth);
+        localStorage.setItem('DISTILLJAR_ASST_WIDTH', String(newWidth));
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingLibrary(false);
+      setIsDraggingAssistant(false);
+    };
+
+    if (isDraggingLibrary || isDraggingAssistant) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingLibrary, isDraggingAssistant]);
 
   const [ollamaStatus, setOllamaStatus] = useState<{ online: boolean; models: string[]; latencyMs?: number; checking?: boolean; error?: string }>({
     online: false,
@@ -561,10 +687,18 @@ const App: React.FC = () => {
     checkHealth();
   }, []);
 
-  const checkHealth = async () => {
+  const checkHealth = async (config: AIModelConfig = ollamaConfig) => {
+    setIsFetchingModels(true);
     setOllamaStatus(prev => ({ ...prev, checking: true }));
-    const status = await checkOllamaStatus(ollamaConfig.baseUrl);
+    const status = await checkModelStatus(config);
     setOllamaStatus({ ...status, checking: false });
+    setIsFetchingModels(false);
+
+    if (status.online && status.models.length > 0 && (!config.model || !status.models.includes(config.model))) {
+      const updated = { ...config, model: status.models[0] };
+      setOllamaConfig(updated);
+      localStorage.setItem('OLLAMA_CONFIG', JSON.stringify(updated));
+    }
   };
 
   const converter = useMemo(() => {
@@ -586,6 +720,21 @@ const App: React.FC = () => {
     }
   }, [messages, isGenerating, isSearching]);
 
+  // Auto-select active paper when papers exist
+  useEffect(() => {
+    if (!activePaper) {
+      const completedJob = queue.find(j => j.result);
+      if (completedJob && completedJob.result) {
+        setActivePaper(completedJob.result);
+      } else {
+        const dbPapers = getAllPapersFromDB();
+        if (dbPapers.length > 0) {
+          setActivePaper(dbPapers[0]);
+        }
+      }
+    }
+  }, [queue, activePaper]);
+
   // Sequential Processing Queue
   useEffect(() => {
     const processNext = async () => {
@@ -600,24 +749,34 @@ const App: React.FC = () => {
 
         if (cached) {
           result = cached;
-          updateJob(nextJob.id, { progress: 100 });
+          updateJob(nextJob.id, { status: 'Completed', progress: 100, result: cached });
+          if (!activePaper) setActivePaper(cached);
         } else {
           const { fullText, chunks } = await parsePdf(nextJob.file, (p) => {
             updateJob(nextJob.id, { progress: Math.round(p * 0.3) });
           });
 
-          const compressedContext = await compressDocument(fullText, ollamaConfig, (cp) => {
-            const baseProgress = 30;
-            const compressionStep = Math.round((cp.current / cp.total) * 60);
-            updateJob(nextJob.id, { progress: baseProgress + compressionStep });
-          });
+          let compressedContext = "";
+          try {
+            compressedContext = await compressDocument(fullText, ollamaConfig, (cp) => {
+              const baseProgress = 30;
+              const compressionStep = Math.round((cp.current / cp.total) * 60);
+              updateJob(nextJob.id, { progress: baseProgress + compressionStep });
+            });
+          } catch (compErr) {
+            console.warn("AI compression unavailable, using structured fallback summary:", compErr);
+            compressedContext = `# ${nextJob.file.name.replace(/\.pdf$/i, '')}\n\n` +
+              `> **Document Status**: Indexed in Local Vault (${chunks.length} pages, ${Math.round(fullText.length / 1000)}k characters).\n\n` +
+              `### Content Preview\n\n` +
+              chunks.slice(0, 4).map(c => `**Page ${c.pageNumber}**:\n${c.text}`).join('\n\n---\n\n');
+          }
 
           result = {
             id: Math.random().toString(36).substring(2, 11),
             filename: nextJob.file.name,
             fullText,
             chunks,
-            shortformSummary: "Hierarchical distillation complete. Core technical contributions, theorems, and empirical findings indexed.",
+            shortformSummary: `Indexed ${chunks.length} pages (${Math.round(fullText.length / 1000)}k chars). Ready for queries.`,
             compressedContext,
             tokenStats: { original: fullText.length, compressed: compressedContext.length },
             timestamp: Date.now()
@@ -628,14 +787,19 @@ const App: React.FC = () => {
 
         if (result.chunks.length > 0) {
           updateJob(nextJob.id, { progress: 95 });
-          const index = await buildVectorIndex(result.chunks, ollamaConfig);
-          setVectorIndex(index);
+          try {
+            const index = await buildVectorIndex(result.chunks, ollamaConfig);
+            setVectorIndex(index);
+          } catch (vecErr) {
+            console.warn("Vector indexing fallback:", vecErr);
+          }
         }
 
         updateJob(nextJob.id, { status: 'Completed', progress: 100, result });
-        if (!activePaper) setActivePaper(result);
+        setActivePaper(result);
         setMobileTab('reading');
       } catch (err: any) {
+        console.error("PDF processing failed:", err);
         updateJob(nextJob.id, { status: 'Error', error: err.message });
       }
     };
@@ -659,6 +823,7 @@ const App: React.FC = () => {
       progress: 0
     }));
     setQueue(prev => [...prev, ...newJobs]);
+    setSidebarFilter("");
     e.target.value = "";
   };
 
@@ -702,7 +867,7 @@ const App: React.FC = () => {
     } catch (err: any) {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `**Error**: ${err.message}\n\nPlease check Ollama at \`${ollamaConfig.baseUrl}\`.`,
+        content: `**Error**: ${err.message}\n\nPlease check AI Engine settings or your endpoint URL.`,
         timestamp: Date.now()
       }]);
     } finally {
@@ -716,7 +881,11 @@ const App: React.FC = () => {
     setTimeout(() => setCopiedId(null), 1800);
   };
 
-  const filteredJobs = queue.filter(j => j.file.name.toLowerCase().includes(sidebarFilter.toLowerCase()));
+  const isArxivQuery = parseArxivId(sidebarFilter) !== null;
+  const filteredJobs = queue.filter(j => {
+    if (isArxivQuery) return true;
+    return j.file.name.toLowerCase().includes(sidebarFilter.toLowerCase());
+  });
   const filteredChunks = activePaper?.chunks.filter(c => 
     chunkSearch === "" || 
     c.text.toLowerCase().includes(chunkSearch.toLowerCase()) || 
@@ -744,7 +913,7 @@ const App: React.FC = () => {
         onUploadClick={() => fileInputRef.current?.click()}
         onOpenSettings={() => setShowConfig(true)}
         onSwitchView={(mode) => setViewMode(mode)}
-        onArxivIngest={handleArxivIngest}
+        onUniversalIngest={handleUniversalIngest}
         theme={theme}
       />
       
@@ -754,15 +923,18 @@ const App: React.FC = () => {
       <div className="flex-1 flex overflow-hidden relative">
 
         {/* ----------------------------------------------------------------------- */}
-        {/* 1. LIBRARY PANE (iOS Inset Grouped List)                                 */}
+        {/* 1. LIBRARY PANE (iOS Inset Grouped List - Horizontally Expandable)      */}
         {/* ----------------------------------------------------------------------- */}
-        <aside className={`w-full md:w-80 border-r flex flex-col shrink-0 z-20 transition-all ${
-          mobileTab !== 'library' ? 'hidden md:flex' : 'flex'
-        } ${
-          theme === 'dark' ? 'bg-[#000000] border-[#38383A]' : 'bg-[#F2F2F7] border-[#C6C6C8]'
-        }`}>
+        <aside
+          style={{ width: isLibraryCollapsed ? '0px' : `${libraryWidth}px` }}
+          className={`border-r flex flex-col shrink-0 z-20 transition-[width] duration-75 relative overflow-hidden ${
+            mobileTab !== 'library' ? 'hidden md:flex' : 'flex w-full'
+          } ${
+            theme === 'dark' ? 'bg-[#000000] border-[#38383A]' : 'bg-[#F2F2F7] border-[#C6C6C8]'
+          }`}
+        >
           {/* iOS Navigation Bar with Large Title */}
-          <div className="pt-4 px-4 pb-2">
+          <div className="pt-4 px-4 pb-2 shrink-0">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <DistillJarLogo className="w-5 h-5 shrink-0" />
@@ -786,20 +958,25 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <h1 className="text-[34px] font-bold tracking-tight leading-tight">
-              Library
-            </h1>
+            <div className="flex items-center justify-between">
+              <h1 className="text-[34px] font-bold tracking-tight leading-tight">
+                Library
+              </h1>
+              <span className="text-[12px] font-mono text-[#8E8E93] bg-[#8E8E93]/15 px-2 py-0.5 rounded-full">
+                {storageInfo.count}
+              </span>
+            </div>
           </div>
 
-          {/* iOS Search Bar & arXiv Ingest Bar */}
-          <div className="px-4 py-2 space-y-2">
+          {/* iOS Search Bar & Universal Ingest Bar */}
+          <div className="px-4 py-2 space-y-2 shrink-0">
             <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[17px] ${
               theme === 'dark' ? 'bg-[#1C1C1E] text-white' : 'bg-[#E5E5EA] text-black'
             }`}>
               <SearchIcon className="w-4 h-4 text-[#8E8E93]" />
               <input
                 type="text"
-                placeholder="Search or paste arXiv URL/ID..."
+                placeholder="Search or paste arXiv/Web URL..."
                 value={sidebarFilter}
                 onChange={(e) => setSidebarFilter(e.target.value)}
                 className="bg-transparent focus:outline-none w-full text-[15px] placeholder:text-[#8E8E93]"
@@ -813,21 +990,23 @@ const App: React.FC = () => {
               </button>
             </div>
 
-            {/* 1-Tap arXiv Ingestion Trigger */}
+            {/* 1-Tap Universal Ingestion Trigger */}
             {(() => {
-              const arxivId = parseArxivId(sidebarFilter);
-              if (!arxivId) return null;
+              const detectedTarget = parseIngestTarget(sidebarFilter);
+              if (!detectedTarget) return null;
               return (
                 <button
-                  onClick={() => handleArxivIngest(arxivId)}
+                  onClick={() => handleUniversalIngest(detectedTarget)}
                   disabled={isFetchingArxiv}
                   className="w-full p-2.5 rounded-xl bg-[#007AFF] text-white text-[13px] font-semibold flex items-center justify-between shadow-sm active:scale-[0.98] transition-all"
                 >
                   <span className="flex items-center gap-2 truncate">
                     <DownloadIcon className="w-4 h-4 shrink-0" />
-                    <span className="truncate">{isFetchingArxiv ? 'Fetching arXiv Paper...' : `1-Tap Ingest: ${arxivId}`}</span>
+                    <span className="truncate">{isFetchingArxiv ? 'Fetching Document...' : `1-Tap Ingest: ${detectedTarget.label}`}</span>
                   </span>
-                  <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full font-mono shrink-0">PDF</span>
+                  <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full font-mono shrink-0">
+                    {detectedTarget.type === 'arxiv' ? 'arXiv' : 'URL'}
+                  </span>
                 </button>
               );
             })()}
@@ -852,8 +1031,9 @@ const App: React.FC = () => {
                     <div
                       key={job.id}
                       onClick={() => {
-                        if (job.result) {
-                          setActivePaper(job.result);
+                        const targetPaper = job.result || getPaperFromDB(job.file.name) || getAllPapersFromDB().find(p => p.filename === job.file.name || p.id === job.id);
+                        if (targetPaper) {
+                          setActivePaper(targetPaper);
                           setMobileTab('reading');
                         }
                       }}
@@ -873,9 +1053,23 @@ const App: React.FC = () => {
                         {job.status === 'Processing' ? (
                           <div className="mt-1.5 flex items-center gap-2">
                             <div className="flex-1 bg-[#8E8E93]/30 h-1 rounded-full overflow-hidden">
-                              <div className="bg-[#EDEDEA] dark:bg-[#EDEDEA] h-full transition-all duration-300" style={{ width: `${job.progress}%` }} />
+                              <div className="bg-[#007AFF] h-full transition-all duration-300" style={{ width: `${job.progress}%` }} />
                             </div>
-                            <span className="text-[12px] font-mono text-[#8E8E93]">{job.progress}%</span>
+                            <span className="text-[12px] font-mono text-[#007AFF]">{job.progress}%</span>
+                          </div>
+                        ) : job.status === 'Error' ? (
+                          <div className="mt-0.5 text-[12px] text-rose-500 flex items-center gap-2">
+                            <span className="truncate max-w-[180px]">Error: {job.error || 'Processing fault'}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateJob(job.id, { status: 'Queued', progress: 0, error: undefined });
+                              }}
+                              className="text-[#007AFF] font-medium underline shrink-0"
+                            >
+                              Retry
+                            </button>
                           </div>
                         ) : job.result ? (
                           <div className="mt-0.5 text-[13px] text-[#8E8E93] flex items-center gap-2">
@@ -905,61 +1099,121 @@ const App: React.FC = () => {
           </div>
 
           {/* Sidebar Status Footer */}
-          <div className="p-3.5 border-t border-[#38383A]/30 flex items-center justify-between text-[13px] text-[#8E8E93]">
-            <span className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${ollamaStatus.online ? 'bg-[#EDEDEA]' : 'bg-zinc-400'}`} />
-              <span>{ollamaConfig.model}</span>
+          <div className="p-3.5 border-t border-[#38383A]/30 flex items-center justify-between text-[13px] text-[#8E8E93] shrink-0">
+            <span className="flex items-center gap-1.5 truncate">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${ollamaStatus.online ? 'bg-[#EDEDEA]' : 'bg-zinc-400'}`} />
+              <span className="truncate">{ollamaConfig.model}</span>
             </span>
-            <span>{storageInfo.count} Papers</span>
+            <span className="shrink-0">{storageInfo.count} Papers</span>
           </div>
         </aside>
+
+        {/* Horizontal Drag Resizer for Library */}
+        {!isLibraryCollapsed && (
+          <div
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsDraggingLibrary(true);
+            }}
+            className={`hidden md:flex w-2.5 -mr-1.5 z-30 cursor-col-resize items-center justify-center group hover:bg-[#007AFF]/25 transition-colors select-none ${
+              isDraggingLibrary ? 'bg-[#007AFF]' : ''
+            }`}
+            title="Drag horizontally to resize Library"
+          >
+            <div className="w-[1.5px] h-8 bg-[#8E8E93]/40 group-hover:bg-[#007AFF] group-hover:h-12 transition-all rounded-full" />
+          </div>
+        )}
 
         {/* ----------------------------------------------------------------------- */}
         {/* 2. READING & DISTILLATION STUDIO PANE                                   */}
         {/* ----------------------------------------------------------------------- */}
-        <main className={`flex-1 flex flex-col overflow-hidden relative transition-all ${
+        <main className={`flex-1 flex flex-col overflow-hidden relative transition-all min-w-[320px] ${
           mobileTab !== 'reading' ? 'hidden md:flex' : 'flex'
         } ${
           theme === 'dark' ? 'bg-[#000000]' : 'bg-[#FFFFFF]'
         }`}>
           {!activePaper ? (
-            /* Empty State */
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-sm mx-auto">
-              <DistillJarLogo className="w-16 h-16 mb-4 drop-shadow-md" />
-              <h2 className="text-[22px] font-bold mb-1">No Document Selected</h2>
-              <p className="text-[15px] text-[#8E8E93] mb-6">Choose a paper from your library or upload a new PDF.</p>
-              <button
-                onClick={() => setMobileTab('library')}
-                className="md:hidden px-6 py-2.5 rounded-full bg-[#007AFF] text-white font-semibold text-[15px] shadow-sm active:opacity-75"
-              >
-                Go to Library
-              </button>
-            </div>
+            (() => {
+              const activeJob = queue.find(j => j.status === 'Processing' || j.status === 'Queued');
+              if (activeJob) {
+                return (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-sm mx-auto space-y-4">
+                    <div className="relative">
+                      <DistillJarLogo className="w-16 h-16 animate-pulse" />
+                      <div className="absolute -inset-2.5 border-2 border-[#007AFF] rounded-full border-t-transparent animate-spin" />
+                    </div>
+                    <div>
+                      <h2 className="text-[20px] font-bold mb-1 truncate max-w-xs">{activeJob.file.name.replace(/\.pdf$/i, '')}</h2>
+                      <p className="text-[14px] text-[#8E8E93]">Distilling Knowledge Matrix ({activeJob.progress}%)...</p>
+                    </div>
+                    <div className="w-48 bg-[#8E8E93]/20 h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-[#007AFF] h-full transition-all duration-300" style={{ width: `${activeJob.progress}%` }} />
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-sm mx-auto">
+                  <DistillJarLogo className="w-16 h-16 mb-4 drop-shadow-md" />
+                  <h2 className="text-[22px] font-bold mb-1">No Document Selected</h2>
+                  <p className="text-[15px] text-[#8E8E93] mb-6">Choose a paper from your library or upload a document to begin.</p>
+                  <label className="px-6 py-2.5 rounded-full bg-[#007AFF] text-white font-semibold text-[15px] shadow-sm active:opacity-75 cursor-pointer inline-flex items-center gap-2">
+                    <input type="file" accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.html" multiple onChange={handleFileUpload} className="hidden" />
+                    <PlusIcon className="w-4 h-4" />
+                    <span>Upload Document</span>
+                  </label>
+                </div>
+              );
+            })()
           ) : (
             /* Active Document Studio */
             <>
-              {/* iOS Navigation Bar with Inline Title & Segmented Switcher */}
+              {/* iOS Navigation Bar with Inline Title, Segmented Switcher & Sidebar Toggles */}
               <header className="ios-blur ios-nav-bg sticky top-0 z-30 px-4 py-2.5 flex flex-col gap-2 shrink-0">
-                <div className="flex items-center justify-between">
-                  <button
-                    onClick={() => setMobileTab('library')}
-                    className="md:hidden text-[#007AFF] font-medium text-[17px] flex items-center gap-0.5"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                    <span>Library</span>
-                  </button>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setMobileTab('library')}
+                      className="md:hidden text-[#007AFF] font-medium text-[17px] flex items-center gap-0.5"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                      <span>Library</span>
+                    </button>
+
+                    <button
+                      onClick={() => setIsLibraryCollapsed(prev => !prev)}
+                      className={`hidden md:flex p-1.5 rounded-lg transition-colors ${
+                        isLibraryCollapsed ? 'text-[#007AFF] bg-[#007AFF]/10' : 'text-[#8E8E93] hover:text-[#007AFF] hover:bg-[#007AFF]/10'
+                      }`}
+                      title={isLibraryCollapsed ? "Expand Library Sidebar" : "Collapse Library Sidebar"}
+                    >
+                      <SidebarToggleIcon className="w-4 h-4" />
+                    </button>
+                  </div>
 
                   <h2 className="text-[17px] font-semibold truncate max-w-[260px] md:max-w-md mx-auto text-center">
                     {activePaper.filename.replace(/\.pdf$/i, '')}
                   </h2>
 
-                  <button
-                    onClick={() => copyToClipboard(activePaper.compressedContext, 'top-copy')}
-                    className="text-[#007AFF] hover:opacity-80 active:opacity-60 font-medium text-[16px] flex items-center gap-1 transition-opacity"
-                  >
-                    {copiedId === 'top-copy' ? <CheckIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
-                    <span>{copiedId === 'top-copy' ? 'Copied' : 'Copy'}</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => copyToClipboard(activePaper.compressedContext, 'top-copy')}
+                      className="text-[#007AFF] hover:opacity-80 active:opacity-60 font-medium text-[16px] flex items-center gap-1 transition-opacity"
+                    >
+                      {copiedId === 'top-copy' ? <CheckIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
+                      <span>{copiedId === 'top-copy' ? 'Copied' : 'Copy'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => setIsAssistantCollapsed(prev => !prev)}
+                      className={`hidden md:flex p-1.5 rounded-lg transition-colors ${
+                        isAssistantCollapsed ? 'text-[#007AFF] bg-[#007AFF]/10' : 'text-[#8E8E93] hover:text-[#007AFF] hover:bg-[#007AFF]/10'
+                      }`}
+                      title={isAssistantCollapsed ? "Expand Assistant Pane" : "Collapse Assistant Pane"}
+                    >
+                      <AssistantToggleIcon className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* iOS UISegmentedControl */}
@@ -1092,14 +1346,33 @@ const App: React.FC = () => {
           )}
         </main>
 
+        {/* Horizontal Drag Resizer for Assistant */}
+        {!isAssistantCollapsed && (
+          <div
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsDraggingAssistant(true);
+            }}
+            className={`hidden md:flex w-2.5 -ml-1.5 z-30 cursor-col-resize items-center justify-center group hover:bg-[#007AFF]/25 transition-colors select-none ${
+              isDraggingAssistant ? 'bg-[#007AFF]' : ''
+            }`}
+            title="Drag horizontally to resize Assistant"
+          >
+            <div className="w-[1.5px] h-8 bg-[#8E8E93]/40 group-hover:bg-[#007AFF] group-hover:h-12 transition-all rounded-full" />
+          </div>
+        )}
+
         {/* ----------------------------------------------------------------------- */}
-        {/* 3. ASSISTANT CHAT PANE                                                  */}
+        {/* 3. ASSISTANT CHAT PANE (Horizontally Expandable)                         */}
         {/* ----------------------------------------------------------------------- */}
-        <aside className={`w-full md:w-96 border-l flex flex-col shrink-0 z-20 transition-all ${
-          mobileTab !== 'assistant' ? 'hidden md:flex' : 'flex'
-        } ${
-          theme === 'dark' ? 'bg-[#000000] border-[#38383A]' : 'bg-[#FFFFFF] border-[#C6C6C8]'
-        }`}>
+        <aside
+          style={{ width: isAssistantCollapsed ? '0px' : `${assistantWidth}px` }}
+          className={`border-l flex flex-col shrink-0 z-20 transition-[width] duration-75 relative overflow-hidden ${
+            mobileTab !== 'assistant' ? 'hidden md:flex' : 'flex w-full'
+          } ${
+            theme === 'dark' ? 'bg-[#000000] border-[#38383A]' : 'bg-[#FFFFFF] border-[#C6C6C8]'
+          }`}
+        >
           {/* iOS Chat Header */}
           <div className="ios-blur ios-nav-bg px-4 py-3 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1346,27 +1619,170 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Ollama Section */}
+              {/* AI Provider & Engine Section (Apple Segmented Picker & BYOK) */}
               <div className={`rounded-2xl overflow-hidden divide-y divide-[#38383A]/30 ${
                 theme === 'dark' ? 'bg-[#2C2C2E]' : 'bg-white'
               }`}>
+                {/* Header with Title & Status Beacon */}
                 <div className="p-3.5 flex items-center justify-between">
-                  <span className="text-[#8E8E93]">Ollama URL</span>
-                  <input
-                    type="text"
-                    value={ollamaConfig.baseUrl}
-                    onChange={(e) => setOllamaConfig({ ...ollamaConfig, baseUrl: e.target.value })}
-                    className="bg-transparent text-right focus:outline-none text-[15px]"
-                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[15px] font-semibold">AI Engine & Model</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${
+                      ollamaStatus.online ? 'bg-[#34C759] shadow-[0_0_8px_#34C759]' : 'bg-[#FF3B30]'
+                    }`} />
+                    <span className="text-[12px] font-medium text-[#8E8E93]">
+                      {ollamaStatus.online ? (
+                        `${ollamaStatus.models.length} model${ollamaStatus.models.length === 1 ? '' : 's'} (${ollamaStatus.latencyMs || 0}ms)`
+                      ) : (
+                        ollamaStatus.error ? 'Setup Required' : 'Disconnected'
+                      )}
+                    </span>
+                  </div>
                 </div>
-                <div className="p-3.5 flex items-center justify-between">
-                  <span className="text-[#8E8E93]">Model</span>
-                  <input
-                    type="text"
-                    value={ollamaConfig.model}
-                    onChange={(e) => setOllamaConfig({ ...ollamaConfig, model: e.target.value })}
-                    className="bg-transparent text-right focus:outline-none text-[15px]"
-                  />
+
+                {/* iOS Segmented Provider Selector */}
+                <div className="p-2.5 bg-black/5 dark:bg-black/20">
+                  <div className={`p-1 rounded-xl flex items-center gap-1 ${
+                    theme === 'dark' ? 'bg-[#1C1C1E]' : 'bg-[#E5E5EA]'
+                  }`}>
+                    {(['ollama', 'openai', 'anthropic', 'gemini', 'custom'] as const).map((prov) => {
+                      const isActive = (ollamaConfig.provider || 'ollama') === prov;
+                      const label = prov === 'ollama' ? 'Local' : prov === 'openai' ? 'OpenAI' : prov === 'anthropic' ? 'Claude' : prov === 'gemini' ? 'Gemini' : 'Custom';
+                      return (
+                        <button
+                          key={prov}
+                          type="button"
+                          onClick={() => {
+                            const updated: AIModelConfig = {
+                              ...ollamaConfig,
+                              provider: prov,
+                              baseUrl: prov === 'ollama' ? 'http://localhost:11434' : prov === 'openai' ? 'https://api.openai.com/v1' : ollamaConfig.baseUrl,
+                              model: prov === 'ollama' ? 'llama3.2:latest' : prov === 'openai' ? 'gpt-4o' : prov === 'anthropic' ? 'claude-3-5-sonnet-20241022' : prov === 'gemini' ? 'gemini-2.0-flash' : ollamaConfig.model
+                            };
+                            setOllamaConfig(updated);
+                            localStorage.setItem('OLLAMA_CONFIG', JSON.stringify(updated));
+                            checkHealth(updated);
+                          }}
+                          className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
+                            isActive
+                              ? theme === 'dark' ? 'bg-[#636366] text-white shadow-sm font-semibold' : 'bg-white text-black shadow-sm font-semibold'
+                              : 'text-[#8E8E93] hover:text-black dark:hover:text-white'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* BYOK API Key Authorization Field (if not local ollama) */}
+                {ollamaConfig.provider && ollamaConfig.provider !== 'ollama' && (
+                  <div className="p-3.5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] font-medium text-[#8E8E93] flex items-center gap-1.5">
+                        <KeyIcon className="w-3.5 h-3.5 text-[#007AFF]" />
+                        <span>API Key (BYOK)</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="text-[12px] text-[#007AFF] font-medium active:opacity-60"
+                      >
+                        {showApiKey ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      placeholder={`Enter ${ollamaConfig.provider.toUpperCase()} API Key`}
+                      value={ollamaConfig.apiKey || ''}
+                      onChange={(e) => {
+                        const updated = { ...ollamaConfig, apiKey: e.target.value };
+                        setOllamaConfig(updated);
+                        localStorage.setItem('OLLAMA_CONFIG', JSON.stringify(updated));
+                      }}
+                      onBlur={() => checkHealth(ollamaConfig)}
+                      className={`w-full px-3 py-2 rounded-xl text-[14px] focus:outline-none ${
+                        theme === 'dark' ? 'bg-[#1C1C1E] text-white placeholder:text-[#8E8E93]' : 'bg-[#F2F2F7] text-black placeholder:text-[#8E8E93]'
+                      }`}
+                    />
+                  </div>
+                )}
+
+                {/* Endpoint Base URL (for Ollama or Custom BYOK) */}
+                {(ollamaConfig.provider === 'ollama' || ollamaConfig.provider === 'custom') && (
+                  <div className="p-3.5 flex items-center justify-between">
+                    <span className="text-[#8E8E93] text-[13px]">Endpoint URL</span>
+                    <input
+                      type="text"
+                      value={ollamaConfig.baseUrl}
+                      onChange={(e) => {
+                        const updated = { ...ollamaConfig, baseUrl: e.target.value };
+                        setOllamaConfig(updated);
+                        localStorage.setItem('OLLAMA_CONFIG', JSON.stringify(updated));
+                      }}
+                      onBlur={() => checkHealth(ollamaConfig)}
+                      placeholder="http://localhost:11434"
+                      className="bg-transparent text-right focus:outline-none text-[13px] w-64 text-[#007AFF] font-mono"
+                    />
+                  </div>
+                )}
+
+                {/* Model Selector & Auto-Fetch Button */}
+                <div className="p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#8E8E93] text-[13px]">Active Model</span>
+                    <button
+                      type="button"
+                      onClick={() => checkHealth(ollamaConfig)}
+                      disabled={isFetchingModels}
+                      className="text-[12px] text-[#007AFF] font-medium flex items-center gap-1 hover:opacity-80 active:opacity-60 disabled:opacity-40"
+                    >
+                      <RefreshIcon className={`w-3.5 h-3.5 ${isFetchingModels ? 'animate-spin' : ''}`} />
+                      <span>{isFetchingModels ? 'Detecting...' : 'Fetch Models'}</span>
+                    </button>
+                  </div>
+
+                  {ollamaStatus.models.length > 0 ? (
+                    <div className="relative">
+                      <select
+                        value={ollamaConfig.model}
+                        onChange={(e) => {
+                          const updated = { ...ollamaConfig, model: e.target.value };
+                          setOllamaConfig(updated);
+                          localStorage.setItem('OLLAMA_CONFIG', JSON.stringify(updated));
+                        }}
+                        className={`w-full appearance-none px-3 py-2 rounded-xl text-[14px] font-medium focus:outline-none cursor-pointer ${
+                          theme === 'dark' ? 'bg-[#1C1C1E] text-white' : 'bg-[#F2F2F7] text-black'
+                        }`}
+                      >
+                        {ollamaStatus.models.map((m) => (
+                          <option key={m} value={m} className={theme === 'dark' ? 'bg-[#1C1C1E] text-white' : 'bg-white text-black'}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[#8E8E93]">
+                        <ChevronRight className="w-4 h-4 rotate-90" />
+                      </div>
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={ollamaConfig.model}
+                      onChange={(e) => {
+                        const updated = { ...ollamaConfig, model: e.target.value };
+                        setOllamaConfig(updated);
+                        localStorage.setItem('OLLAMA_CONFIG', JSON.stringify(updated));
+                      }}
+                      placeholder="e.g. llama3.2:latest, gpt-4o, etc."
+                      className={`w-full px-3 py-2 rounded-xl text-[14px] focus:outline-none ${
+                        theme === 'dark' ? 'bg-[#1C1C1E] text-white' : 'bg-[#F2F2F7] text-black'
+                      }`}
+                    />
+                  )}
                 </div>
               </div>
 

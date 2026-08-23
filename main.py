@@ -7,6 +7,7 @@ and zero-telemetry structured citation extraction.
 import os
 import json
 import tempfile
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 from pydantic import BaseModel
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response
@@ -90,19 +91,106 @@ async def fetch_arxiv_endpoint(arxiv_id: str):
     Proxies and fetches raw PDF bytes from arXiv to bypass client-side CORS restrictions.
     """
     clean_id = arxiv_id.strip().replace(".pdf", "")
-    url = f"https://export.arxiv.org/pdf/{clean_id}.pdf"
+    urls = [
+        f"https://arxiv.org/pdf/{clean_id}.pdf",
+        f"https://export.arxiv.org/pdf/{clean_id}.pdf",
+        f"https://arxiv.org/pdf/{clean_id}"
+    ]
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "application/pdf,application/octet-stream,*/*",
+        "Referer": "https://arxiv.org"
+    }
+    
+    last_err = ""
+    for target_url in urls:
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                resp = await client.get(target_url, headers=headers)
+                if resp.status_code == 200 and len(resp.content) > 500:
+                    return Response(content=resp.content, media_type="application/pdf")
+                last_err = f"arXiv returned status {resp.status_code}, size {len(resp.content)} bytes"
+        except Exception as e:
+            last_err = str(e)
+            
+    raise HTTPException(status_code=500, detail=f"Failed to fetch arXiv PDF: {last_err}")
+
+
+@app.get("/api/fetch-url")
+async def fetch_url_endpoint(url: str):
+    """
+    Fetches any external URL (PDF binary, HTML article, text) and returns content with appropriate media type.
+    """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 DistillJar/1.0",
-        "Referer": "https://arxiv.org"
+        "Accept": "text/html,application/xhtml+xml,application/xml,application/pdf;q=0.9,*/*;q=0.8",
     }
     try:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             resp = await client.get(url, headers=headers)
             if resp.status_code != 200:
-                raise HTTPException(status_code=resp.status_code, detail=f"arXiv returned {resp.status_code}")
-            return Response(content=resp.content, media_type="application/pdf")
+                raise HTTPException(status_code=resp.status_code, detail=f"Server returned {resp.status_code}")
+            content_type = resp.headers.get("content-type", "application/octet-stream")
+            return Response(content=resp.content, media_type=content_type)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch arXiv PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch URL: {str(e)}")
+
+
+class ProxyModelRequest(BaseModel):
+    url: str
+    api_key: Optional[str] = None
+
+
+@app.post("/api/proxy-models")
+async def proxy_models_endpoint(req: ProxyModelRequest):
+    """
+    Proxies GET requests to custom OpenAI-compatible /models endpoints to bypass browser CORS.
+    """
+    headers = {"Accept": "application/json"}
+    if req.api_key and req.api_key.strip():
+        headers["Authorization"] = f"Bearer {req.api_key.strip()}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(req.url, headers=headers)
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+
+
+class ProxyChatRequest(BaseModel):
+    url: str
+    model: str
+    messages: List[Dict[str, Any]]
+    api_key: Optional[str] = None
+    temperature: Optional[float] = 0.2
+    max_tokens: Optional[int] = 4096
+
+
+@app.post("/api/proxy-chat")
+async def proxy_chat_endpoint(req: ProxyChatRequest):
+    """
+    Proxies chat completion requests to custom OpenAI-compatible endpoints to bypass browser CORS.
+    """
+    headers = {"Content-Type": "application/json"}
+    if req.api_key and req.api_key.strip():
+        headers["Authorization"] = f"Bearer {req.api_key.strip()}"
+    
+    payload = {
+        "model": req.model,
+        "messages": req.messages,
+        "temperature": req.temperature,
+    }
+    if req.max_tokens:
+        payload["max_tokens"] = req.max_tokens
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            resp = await client.post(req.url, headers=headers, json=payload)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code, detail=f"Custom API returned {resp.status_code}: {resp.text}")
+            return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
 
 
 @app.post("/api/extract-citation")

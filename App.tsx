@@ -133,6 +133,190 @@ const GlobeIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   </svg>
 );
 
+const DownloadIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+
+// --- HELPER: PARSE ARXIV / DOI IDS ---
+const parseArxivId = (input: string): string | null => {
+  const trimmed = input.trim();
+  const urlMatch = trimmed.match(/arxiv\.org\/(?:abs|pdf)\/([0-9]+\.[0-9]+(?:v[0-9]+)?)/i);
+  if (urlMatch) return urlMatch[1];
+
+  const doiMatch = trimmed.match(/10\.48550\/arXiv\.([0-9]+\.[0-9]+(?:v[0-9]+)?)/i);
+  if (doiMatch) return doiMatch[1];
+
+  const directMatch = trimmed.match(/^([0-9]{4}\.[0-9]{4,5}(?:v[0-9]+)?)$/i);
+  if (directMatch) return directMatch[1];
+
+  return null;
+};
+
+// --- SPOTLIGHT-STYLE COMMAND PALETTE (⌘K / Ctrl+K) ---
+const CommandPalette: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  papers: ProcessedPaper[];
+  onSelectPaper: (p: ProcessedPaper) => void;
+  onUploadClick: () => void;
+  onOpenSettings: () => void;
+  onSwitchView: (mode: 'synthesis' | 'matrix' | 'chunks') => void;
+  onArxivIngest: (arxivId: string) => void;
+  theme: 'dark' | 'light';
+}> = ({ isOpen, onClose, papers, onSelectPaper, onUploadClick, onOpenSettings, onSwitchView, onArxivIngest, theme }) => {
+  const [search, setSearch] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    } else {
+      setSearch("");
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const detectedArxiv = parseArxivId(search);
+  const filtered = papers.filter(p => p.filename.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-start justify-center pt-20 bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-150">
+      <div className="fixed inset-0" onClick={onClose} />
+      <div
+        className={`relative w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden border ${
+          theme === 'dark' ? 'bg-[#1C1C1E] border-[#38383A] text-white' : 'bg-white border-[#E5E5EA] text-black'
+        }`}
+      >
+        {/* Search Input Bar */}
+        <div className="p-3.5 border-b border-[#38383A]/30 flex items-center gap-3">
+          <SearchIcon className="w-5 h-5 text-[#007AFF] shrink-0" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') onClose();
+              if (e.key === 'Enter') {
+                if (detectedArxiv) {
+                  onArxivIngest(detectedArxiv);
+                  onClose();
+                } else if (filtered.length > 0) {
+                  onSelectPaper(filtered[0]);
+                  onClose();
+                }
+              }
+            }}
+            placeholder="Search papers, arXiv URL/ID, actions... (ESC to exit)"
+            className="w-full bg-transparent focus:outline-none text-[16px] placeholder:text-[#8E8E93]"
+          />
+          <kbd className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-[#8E8E93]/20 text-[#8E8E93] shrink-0">ESC</kbd>
+        </div>
+
+        {/* Action & Results List */}
+        <div className="max-h-80 overflow-y-auto p-2 space-y-1 custom-scrollbar text-[14px]">
+          {/* 1-Tap arXiv Action */}
+          {detectedArxiv && (
+            <button
+              onClick={() => { onArxivIngest(detectedArxiv); onClose(); }}
+              className="w-full text-left p-2.5 rounded-xl bg-[#007AFF] text-white flex items-center justify-between font-medium active:scale-[0.98] transition-all mb-1"
+            >
+              <span className="flex items-center gap-2">
+                <DownloadIcon className="w-4 h-4" />
+                <span>1-Tap Ingest arXiv: <strong>{detectedArxiv}</strong></span>
+              </span>
+              <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full font-mono">Press ↵</span>
+            </button>
+          )}
+
+          {/* Quick Actions */}
+          <div className="px-3 py-1 text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider">
+            Quick Actions
+          </div>
+          <button
+            onClick={() => { onClose(); onUploadClick(); }}
+            className="w-full text-left px-3 py-2 rounded-xl flex items-center justify-between hover:bg-[#007AFF]/10 hover:text-[#007AFF] transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <PlusIcon className="w-4 h-4 text-[#007AFF]" />
+              <span>Upload Document</span>
+            </span>
+            <kbd className="text-[11px] font-mono text-[#8E8E93]">⌘O</kbd>
+          </button>
+
+          <button
+            onClick={() => { onClose(); onOpenSettings(); }}
+            className="w-full text-left px-3 py-2 rounded-xl flex items-center justify-between hover:bg-[#007AFF]/10 hover:text-[#007AFF] transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <GearIcon className="w-4 h-4 text-[#007AFF]" />
+              <span>Open Settings</span>
+            </span>
+            <kbd className="text-[11px] font-mono text-[#8E8E93]">⌘,</kbd>
+          </button>
+
+          {/* View Modes */}
+          <div className="px-3 py-1 pt-2 text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider">
+            Switch View
+          </div>
+          <button
+            onClick={() => { onClose(); onSwitchView('synthesis'); }}
+            className="w-full text-left px-3 py-2 rounded-xl flex items-center justify-between hover:bg-[#007AFF]/10 hover:text-[#007AFF] transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <DocIcon className="w-4 h-4 text-[#007AFF]" />
+              <span>Summary View</span>
+            </span>
+            <kbd className="text-[11px] font-mono text-[#8E8E93]">⌘1</kbd>
+          </button>
+          <button
+            onClick={() => { onClose(); onSwitchView('matrix'); }}
+            className="w-full text-left px-3 py-2 rounded-xl flex items-center justify-between hover:bg-[#007AFF]/10 hover:text-[#007AFF] transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <BookIcon className="w-4 h-4 text-[#007AFF]" />
+              <span>Knowledge Matrix</span>
+            </span>
+            <kbd className="text-[11px] font-mono text-[#8E8E93]">⌘2</kbd>
+          </button>
+          <button
+            onClick={() => { onClose(); onSwitchView('chunks'); }}
+            className="w-full text-left px-3 py-2 rounded-xl flex items-center justify-between hover:bg-[#007AFF]/10 hover:text-[#007AFF] transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <DocIcon className="w-4 h-4 text-[#007AFF]" />
+              <span>Pages & Citations</span>
+            </span>
+            <kbd className="text-[11px] font-mono text-[#8E8E93]">⌘3</kbd>
+          </button>
+
+          {/* Papers in Vault */}
+          {papers.length > 0 && (
+            <>
+              <div className="px-3 py-1 pt-2 text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider">
+                Papers in Vault ({filtered.length})
+              </div>
+              {filtered.map(paper => (
+                <button
+                  key={paper.id}
+                  onClick={() => { onSelectPaper(paper); onClose(); }}
+                  className="w-full text-left px-3 py-2 rounded-xl flex items-center justify-between hover:bg-[#007AFF]/10 hover:text-[#007AFF] transition-colors"
+                >
+                  <span className="truncate pr-2">{paper.filename.replace(/\.pdf$/i, '')}</span>
+                  <span className="text-[11px] text-[#8E8E93] shrink-0">{paper.chunks.length} pages</span>
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- AUTHENTIC APPLE UISWITCH TOGGLE (Apple Green #34C759 / Blue #007AFF) ---
 const IOSToggle: React.FC<{ checked: boolean; onChange: () => void; color?: 'green' | 'blue' }> = ({
   checked,
@@ -234,6 +418,11 @@ const App: React.FC = () => {
   const [mobileTab, setMobileTab] = useState<'library' | 'reading' | 'assistant'>('library');
 
   const [showConfig, setShowConfig] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [isFetchingArxiv, setIsFetchingArxiv] = useState(false);
+  const [highlightedPage, setHighlightedPage] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [viewMode, setViewMode] = useState<'synthesis' | 'matrix' | 'chunks'>('synthesis');
   const [chunkSearch, setChunkSearch] = useState("");
   const [sidebarFilter, setSidebarFilter] = useState("");
@@ -242,6 +431,85 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('OLLAMA_CONFIG');
     return saved ? JSON.parse(saved) : { baseUrl: 'http://localhost:11434', model: 'llama3.2:latest' };
   });
+
+  // Global Keyboard Shortcuts (⌘K, ⌘O, ⌘1, ⌘2, ⌘3, ⌘,)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // ⌘K or Ctrl+K -> Command Palette
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowCommandPalette(prev => !prev);
+      }
+      // ⌘O or Ctrl+O -> Open File Picker
+      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        fileInputRef.current?.click();
+      }
+      // ⌘, or Ctrl+, -> Open Settings
+      else if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        setShowConfig(true);
+      }
+      // ⌘1 -> Summary View
+      else if ((e.metaKey || e.ctrlKey) && e.key === '1') {
+        e.preventDefault();
+        setViewMode('synthesis');
+      }
+      // ⌘2 -> Matrix View
+      else if ((e.metaKey || e.ctrlKey) && e.key === '2') {
+        e.preventDefault();
+        setViewMode('matrix');
+      }
+      // ⌘3 -> Pages View
+      else if ((e.metaKey || e.ctrlKey) && e.key === '3') {
+        e.preventDefault();
+        setViewMode('chunks');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Interactive Citation Jump Handler
+  const jumpToPage = (pageNum: number) => {
+    setViewMode('chunks');
+    setMobileTab('reading');
+    setHighlightedPage(pageNum);
+    setTimeout(() => {
+      const el = document.getElementById(`chunk-page-${pageNum}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+    setTimeout(() => setHighlightedPage(null), 3000);
+  };
+
+  // 1-Tap arXiv Ingest Handler
+  const handleArxivIngest = async (arxivId: string) => {
+    setIsFetchingArxiv(true);
+    const pdfUrl = `https://arxiv.org/pdf/${arxivId}.pdf`;
+    try {
+      const resp = await fetch(pdfUrl);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const blob = await resp.blob();
+      const file = new File([blob], `arxiv_${arxivId}.pdf`, { type: 'application/pdf' });
+      const newJob: ProcessJob = {
+        id: Math.random().toString(36).substring(2, 9),
+        file,
+        status: 'Queued',
+        progress: 0
+      };
+      setQueue(prev => [newJob, ...prev]);
+      setSidebarFilter("");
+      setShowCommandPalette(false);
+    } catch (e) {
+      console.warn("Direct arXiv download fallback", e);
+      alert(`Direct browser download from arXiv was blocked by CORS. You can download and drop ${pdfUrl} into DistillJar.`);
+    } finally {
+      setIsFetchingArxiv(false);
+    }
+  };
 
   const [ollamaStatus, setOllamaStatus] = useState<{ online: boolean; models: string[]; latencyMs?: number; checking?: boolean; error?: string }>({
     online: false,
@@ -439,6 +707,22 @@ const App: React.FC = () => {
     }`}>
       {/* Apple-Style Native Launch Splash */}
       {showSplash && <AppleLaunchSplash isExiting={isExitingSplash} theme={theme} />}
+
+      {/* Spotlight Command Palette (⌘K) */}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        papers={getAllPapersFromDB()}
+        onSelectPaper={(p) => {
+          setActivePaper(p);
+          setMobileTab('reading');
+        }}
+        onUploadClick={() => fileInputRef.current?.click()}
+        onOpenSettings={() => setShowConfig(true)}
+        onSwitchView={(mode) => setViewMode(mode)}
+        onArxivIngest={handleArxivIngest}
+        theme={theme}
+      />
       
       {/* ========================================================================= */}
       {/* DESKTOP / IPAD SPLIT VIEW (md:flex) & MOBILE ROUTING CONTAINER           */}
@@ -467,12 +751,12 @@ const App: React.FC = () => {
                 <button
                   onClick={() => setShowConfig(true)}
                   className="w-8 h-8 rounded-lg flex items-center justify-center text-[#007AFF] hover:bg-[#007AFF]/10 active:opacity-40 transition-all"
-                  title="Settings"
+                  title="Settings (⌘,)"
                 >
                   <GearIcon className="w-5 h-5" />
                 </button>
-                <label className="w-8 h-8 rounded-lg flex items-center justify-center text-[#007AFF] hover:bg-[#007AFF]/10 cursor-pointer active:opacity-40 transition-all" title="Add Document">
-                  <input type="file" accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.html" multiple onChange={handleFileUpload} className="hidden" />
+                <label className="w-8 h-8 rounded-lg flex items-center justify-center text-[#007AFF] hover:bg-[#007AFF]/10 cursor-pointer active:opacity-40 transition-all" title="Add Document (⌘O)">
+                  <input ref={fileInputRef} type="file" accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.html" multiple onChange={handleFileUpload} className="hidden" />
                   <PlusIcon className="w-5 h-5" />
                 </label>
               </div>
@@ -483,20 +767,46 @@ const App: React.FC = () => {
             </h1>
           </div>
 
-          {/* iOS Search Bar */}
-          <div className="px-4 py-2">
+          {/* iOS Search Bar & arXiv Ingest Bar */}
+          <div className="px-4 py-2 space-y-2">
             <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[17px] ${
               theme === 'dark' ? 'bg-[#1C1C1E] text-white' : 'bg-[#E5E5EA] text-black'
             }`}>
               <SearchIcon className="w-4 h-4 text-[#8E8E93]" />
               <input
                 type="text"
-                placeholder="Search"
+                placeholder="Search or paste arXiv URL/ID..."
                 value={sidebarFilter}
                 onChange={(e) => setSidebarFilter(e.target.value)}
-                className="bg-transparent focus:outline-none w-full text-[16px] placeholder:text-[#8E8E93]"
+                className="bg-transparent focus:outline-none w-full text-[15px] placeholder:text-[#8E8E93]"
               />
+              <button
+                onClick={() => setShowCommandPalette(true)}
+                className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-[#8E8E93]/20 text-[#8E8E93] hover:text-[#007AFF] transition-colors"
+                title="Command Palette (⌘K)"
+              >
+                ⌘K
+              </button>
             </div>
+
+            {/* 1-Tap arXiv Ingestion Trigger */}
+            {(() => {
+              const arxivId = parseArxivId(sidebarFilter);
+              if (!arxivId) return null;
+              return (
+                <button
+                  onClick={() => handleArxivIngest(arxivId)}
+                  disabled={isFetchingArxiv}
+                  className="w-full p-2.5 rounded-xl bg-[#007AFF] text-white text-[13px] font-semibold flex items-center justify-between shadow-sm active:scale-[0.98] transition-all"
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <DownloadIcon className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{isFetchingArxiv ? 'Fetching arXiv Paper...' : `1-Tap Ingest: ${arxivId}`}</span>
+                  </span>
+                  <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded-full font-mono shrink-0">PDF</span>
+                </button>
+              );
+            })()}
           </div>
 
           {/* iOS Inset Grouped Table */}
@@ -721,27 +1031,35 @@ const App: React.FC = () => {
                         />
                       </div>
 
-                      {filteredChunks.map((chunk, idx) => (
-                        <div
-                          key={chunk.id || idx}
-                          className={`p-4 rounded-2xl ${
-                            theme === 'dark' ? 'bg-[#1C1C1E]' : 'bg-[#F2F2F7]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[12px] font-semibold text-[#8E8E93] uppercase">
-                              Page {chunk.pageNumber}
-                            </span>
-                            <button
-                              onClick={() => copyToClipboard(chunk.text, `chunk-${idx}`)}
-                              className="text-zinc-900 dark:text-zinc-100 text-[13px]"
-                            >
-                              {copiedId === `chunk-${idx}` ? 'Copied' : 'Copy'}
-                            </button>
+                      {filteredChunks.map((chunk, idx) => {
+                        const isHighlighted = highlightedPage === chunk.pageNumber;
+                        return (
+                          <div
+                            key={chunk.id || idx}
+                            id={`chunk-page-${chunk.pageNumber}`}
+                            className={`p-4 rounded-2xl transition-all duration-500 ${
+                              isHighlighted
+                                ? 'ring-2 ring-[#007AFF] bg-[#007AFF]/15 shadow-xl scale-[1.01]'
+                                : theme === 'dark' ? 'bg-[#1C1C1E]' : 'bg-[#F2F2F7]'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className={`text-[12px] font-semibold uppercase px-2 py-0.5 rounded-full transition-colors ${
+                                isHighlighted ? 'bg-[#007AFF] text-white' : 'text-[#8E8E93] bg-[#8E8E93]/10'
+                              }`}>
+                                Page {chunk.pageNumber}
+                              </span>
+                              <button
+                                onClick={() => copyToClipboard(chunk.text, `chunk-${idx}`)}
+                                className="text-[#007AFF] hover:opacity-80 active:opacity-60 text-[13px] font-medium transition-opacity"
+                              >
+                                {copiedId === `chunk-${idx}` ? 'Copied' : 'Copy'}
+                              </button>
+                            </div>
+                            <p className="text-[15px] leading-relaxed">{chunk.text}</p>
                           </div>
-                          <p className="text-[15px] leading-relaxed">{chunk.text}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -817,43 +1135,69 @@ const App: React.FC = () => {
                 </div>
               </div>
             ) : (
-              messages.map((msg, i) => (
-                <div key={i} className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                  <div className={`max-w-[85%] px-4 py-2.5 rounded-[18px] text-[16px] leading-relaxed ${
-                    msg.role === 'user'
-                      ? 'bg-[#EDEDEA] text-black dark:bg-[#EDEDEA] dark:text-black rounded-br-[4px]'
-                      : theme === 'dark'
-                        ? 'bg-[#1C1C1E] text-white rounded-bl-[4px]'
-                        : 'bg-[#E5E5EA] text-black rounded-bl-[4px]'
-                  }`}>
-                    {msg.role === 'user' ? (
-                      msg.content
-                    ) : (
-                      <div
-                        className="markdown-content"
-                        dangerouslySetInnerHTML={{ __html: converter.makeHtml(msg.content) }}
-                      />
+              messages.map((msg, i) => {
+                // Extract cited pages like [Page 4], Page 4, p. 4
+                const citedPages = msg.role === 'assistant' ? Array.from(new Set(
+                  Array.from(msg.content.matchAll(/(?:\[Page\s*(\d+)\]|Page\s*(\d+)|p\.\s*(\d+))/gi))
+                    .map(m => parseInt(m[1] || m[2] || m[3]))
+                    .filter(Boolean)
+                )) : [];
+
+                return (
+                  <div key={i} className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                    <div className={`max-w-[85%] px-4 py-2.5 rounded-[18px] text-[16px] leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'bg-[#007AFF] text-white rounded-br-[4px]'
+                        : theme === 'dark'
+                          ? 'bg-[#1C1C1E] text-white rounded-bl-[4px]'
+                          : 'bg-[#E5E5EA] text-black rounded-bl-[4px]'
+                    }`}>
+                      {msg.role === 'user' ? (
+                        msg.content
+                      ) : (
+                        <div
+                          className="markdown-content"
+                          dangerouslySetInnerHTML={{ __html: converter.makeHtml(msg.content) }}
+                        />
+                      )}
+                    </div>
+
+                    {/* Interactive Citation Jumps */}
+                    {citedPages.length > 0 && (
+                      <div className="flex items-center gap-1.5 px-1 py-0.5 flex-wrap max-w-[85%]">
+                        <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider">Citations:</span>
+                        {citedPages.map(pageNum => (
+                          <button
+                            key={pageNum}
+                            onClick={() => jumpToPage(pageNum)}
+                            className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#007AFF]/15 text-[#007AFF] hover:bg-[#007AFF]/25 active:scale-95 transition-all cursor-pointer flex items-center gap-0.5"
+                          >
+                            <span>Page {pageNum}</span>
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Sources */}
+                    {msg.sources && msg.sources.length > 0 && (
+                      <div className="flex flex-wrap gap-1 px-1 max-w-[85%]">
+                        {msg.sources.slice(0, 2).map((s, si) => (
+                          <a
+                            key={si}
+                            href={s.uri}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] px-2 py-0.5 rounded-full bg-[#8E8E93]/20 text-[#007AFF] truncate max-w-[140px]"
+                          >
+                            {s.title}
+                          </a>
+                        ))}
+                      </div>
                     )}
                   </div>
-
-                  {/* Sources */}
-                  {msg.sources && msg.sources.length > 0 && (
-                    <div className="flex flex-wrap gap-1 px-1 max-w-[85%]">
-                      {msg.sources.slice(0, 2).map((s, si) => (
-                        <a
-                          key={si}
-                          href={s.uri}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[11px] px-2 py-0.5 rounded-full bg-[#8E8E93]/20 text-zinc-900 dark:text-zinc-100 truncate max-w-[140px]"
-                        >
-                          {s.title}
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
 
             {isGenerating && (
@@ -872,16 +1216,22 @@ const App: React.FC = () => {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="iMessage / Prompt"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder="Ask a question... (⌘Enter to send)"
                 disabled={isGenerating}
-                className={`w-full rounded-full pl-4 pr-11 py-2.5 text-[16px] focus:outline-none ${
+                className={`w-full rounded-full pl-4 pr-11 py-2.5 text-[15px] focus:outline-none ${
                   theme === 'dark' ? 'bg-[#1C1C1E] text-white placeholder:text-[#8E8E93]' : 'bg-[#E5E5EA] text-black placeholder:text-[#8E8E93]'
                 }`}
               />
               <button
                 type="submit"
                 disabled={!input.trim() || isGenerating}
-                className="absolute right-1.5 w-7 h-7 rounded-full bg-[#EDEDEA] text-black dark:bg-[#EDEDEA] dark:text-black flex items-center justify-center disabled:opacity-30"
+                className="absolute right-1.5 w-7 h-7 rounded-full bg-[#007AFF] text-white flex items-center justify-center disabled:opacity-30 active:scale-95 transition-transform shadow-sm"
               >
                 <SendArrow className="w-4 h-4" />
               </button>

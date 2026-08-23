@@ -250,6 +250,47 @@
             background: #E5E5EA;
             color: #636366;
         }
+
+        /* Apple Native Launch Splash Keyframes */
+        @keyframes appleScaleIn {
+            0% {
+                opacity: 0;
+                transform: scale(0.86);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @keyframes appleFadeOut {
+            0% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(1.05);
+                visibility: hidden;
+            }
+        }
+
+        @keyframes appleShimmer {
+            0% {
+                background-position: -200% 0;
+            }
+            100% {
+                background-position: 200% 0;
+            }
+        }
+
+        .apple-launch-in {
+            animation: appleScaleIn 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .apple-launch-exit {
+            animation: appleFadeOut 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
     </style>
 </head>
 

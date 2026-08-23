@@ -159,6 +159,38 @@ const IOSToggle: React.FC<{ checked: boolean; onChange: () => void; color?: 'gre
   );
 };
 
+// --- APPLE-STYLE NATIVE LAUNCH SPLASH COMPONENT ---
+const AppleLaunchSplash: React.FC<{ isExiting: boolean; theme: 'dark' | 'light' }> = ({ isExiting, theme }) => {
+  return (
+    <div
+      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center transition-all ${
+        isExiting ? 'apple-launch-exit pointer-events-none' : 'apple-launch-in'
+      } ${
+        theme === 'dark' ? 'bg-[#000000]' : 'bg-[#F2F2F7]'
+      }`}
+    >
+      <div className="flex flex-col items-center gap-5 select-none">
+        <div className="relative">
+          <DistillJarLogo className="w-20 h-20 drop-shadow-[0_8px_30px_rgba(0,122,255,0.25)]" />
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <span className={`text-[16px] font-semibold tracking-[0.14em] uppercase ${
+            theme === 'dark' ? 'text-white' : 'text-black'
+          }`}>
+            DistillJar
+          </span>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#007AFF] animate-ping" />
+            <span className="text-[12px] text-[#8E8E93] tracking-wide">
+              Local Intelligence Vault
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 interface EnhancedMessage extends ChatMessage {
   sources?: { title: string; uri: string }[];
 }
@@ -167,6 +199,17 @@ const App: React.FC = () => {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('THEME') as 'dark' | 'light') || 'dark';
   });
+
+  const [showSplash, setShowSplash] = useState(true);
+  const [isExitingSplash, setIsExitingSplash] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsExitingSplash(true);
+      setTimeout(() => setShowSplash(false), 450);
+    }, 850);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('THEME', theme);
@@ -394,6 +437,8 @@ const App: React.FC = () => {
     <div className={`flex flex-col h-screen w-screen overflow-hidden select-none transition-colors duration-150 ${
       theme === 'dark' ? 'bg-[#000000] text-[#FFFFFF]' : 'bg-[#F2F2F7] text-[#000000]'
     }`}>
+      {/* Apple-Style Native Launch Splash */}
+      {showSplash && <AppleLaunchSplash isExiting={isExitingSplash} theme={theme} />}
       
       {/* ========================================================================= */}
       {/* DESKTOP / IPAD SPLIT VIEW (md:flex) & MOBILE ROUTING CONTAINER           */}

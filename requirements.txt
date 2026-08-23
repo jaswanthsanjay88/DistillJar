@@ -1,0 +1,13 @@
+# Core Backend & Document Ingestion
+markitdown[pdf]>=0.0.1a4
+fastapi>=0.115.0
+uvicorn>=0.34.0
+python-multipart>=0.0.20
+
+# MCP Server & Local Inference
+fastmcp>=0.4.1
+ollama>=0.4.7
+httpx>=0.28.1
+
+# Structured Web Extraction & Grounding (Optional Sidecar)
+scrapegraphai>=1.30.0

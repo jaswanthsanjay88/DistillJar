@@ -485,15 +485,39 @@ const App: React.FC = () => {
     setTimeout(() => setHighlightedPage(null), 3000);
   };
 
-  // 1-Tap arXiv Ingest Handler
+  // 1-Tap arXiv Ingest Handler (CORS-Free Proxy Pipeline)
   const handleArxivIngest = async (arxivId: string) => {
     setIsFetchingArxiv(true);
-    const pdfUrl = `https://arxiv.org/pdf/${arxivId}.pdf`;
+    const cleanId = arxivId.trim().replace(/\.pdf$/i, '');
     try {
-      const resp = await fetch(pdfUrl);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      let resp: Response | null = null;
+      
+      // 1. Try Vite loopback proxy first (CORS-free)
+      try {
+        resp = await fetch(`/api/arxiv-pdf/${cleanId}.pdf`);
+      } catch {
+        resp = null;
+      }
+
+      // 2. Try FastAPI backend proxy if Vite proxy fails
+      if (!resp || !resp.ok) {
+        try {
+          resp = await fetch(`http://localhost:8000/api/fetch-arxiv?arxiv_id=${encodeURIComponent(cleanId)}`);
+        } catch {
+          resp = null;
+        }
+      }
+
+      // 3. Try direct fetch as last resort
+      if (!resp || !resp.ok) {
+        resp = await fetch(`https://arxiv.org/pdf/${cleanId}.pdf`);
+      }
+
+      if (!resp || !resp.ok) throw new Error(`HTTP fetch failed`);
       const blob = await resp.blob();
-      const file = new File([blob], `arxiv_${arxivId}.pdf`, { type: 'application/pdf' });
+      if (blob.size < 500) throw new Error("Downloaded file is empty or blocked.");
+
+      const file = new File([blob], `arxiv_${cleanId}.pdf`, { type: 'application/pdf' });
       const newJob: ProcessJob = {
         id: Math.random().toString(36).substring(2, 9),
         file,
@@ -504,8 +528,8 @@ const App: React.FC = () => {
       setSidebarFilter("");
       setShowCommandPalette(false);
     } catch (e) {
-      console.warn("Direct arXiv download fallback", e);
-      alert(`Direct browser download from arXiv was blocked by CORS. You can download and drop ${pdfUrl} into DistillJar.`);
+      console.warn("arXiv fetch failed:", e);
+      alert(`Could not automatically download arXiv paper (${cleanId}). You can download https://arxiv.org/pdf/${cleanId}.pdf and drop it into DistillJar.`);
     } finally {
       setIsFetchingArxiv(false);
     }

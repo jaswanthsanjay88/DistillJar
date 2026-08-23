@@ -14,6 +14,16 @@ export default defineConfig(({ mode }) => {
           target: 'http://localhost:4000',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/search/, '/search'),
+        },
+        '/api/arxiv-pdf': {
+          target: 'https://arxiv.org',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/api\/arxiv-pdf/, '/pdf'),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 DistillJar/1.0',
+            'Referer': 'https://arxiv.org',
+          },
         }
       }
     },

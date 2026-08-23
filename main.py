@@ -9,7 +9,7 @@ import json
 import tempfile
 from pathlib import Path
 from pydantic import BaseModel
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from markitdown import MarkItDown
 import ollama
@@ -82,6 +82,27 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/fetch-arxiv")
+async def fetch_arxiv_endpoint(arxiv_id: str):
+    """
+    Proxies and fetches raw PDF bytes from arXiv to bypass client-side CORS restrictions.
+    """
+    clean_id = arxiv_id.strip().replace(".pdf", "")
+    url = f"https://export.arxiv.org/pdf/{clean_id}.pdf"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 DistillJar/1.0",
+        "Referer": "https://arxiv.org"
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code, detail=f"arXiv returned {resp.status_code}")
+            return Response(content=resp.content, media_type="application/pdf")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch arXiv PDF: {str(e)}")
 
 
 @app.post("/api/extract-citation")

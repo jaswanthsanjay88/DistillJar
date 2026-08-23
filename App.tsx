@@ -133,24 +133,31 @@ const GlobeIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
   </svg>
 );
 
-// --- AUTHENTIC APPLE BLUE MINIMAL TOGGLE SWITCH (UISwitch) ---
-const IOSToggle: React.FC<{ checked: boolean; onChange: () => void }> = ({ checked, onChange }) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={checked}
-    onClick={onChange}
-    className={`relative inline-flex h-[31px] w-[51px] shrink-0 cursor-pointer rounded-full p-[2px] transition-colors duration-200 ease-in-out focus:outline-none ${
-      checked ? 'bg-[#007AFF]' : 'bg-[#E9E9EB] dark:bg-[#39393D]'
-    }`}
-  >
-    <span
-      className={`pointer-events-none inline-block h-[27px] w-[27px] transform rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,0.15),0_3px_1px_rgba(0,0,0,0.06)] transition-transform duration-200 ease-in-out ${
-        checked ? 'translate-x-[20px]' : 'translate-x-0'
+// --- AUTHENTIC APPLE UISWITCH TOGGLE (Apple Green #34C759 / Blue #007AFF) ---
+const IOSToggle: React.FC<{ checked: boolean; onChange: () => void; color?: 'green' | 'blue' }> = ({
+  checked,
+  onChange,
+  color = 'green',
+}) => {
+  const activeBg = color === 'green' ? 'bg-[#34C759]' : 'bg-[#007AFF]';
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      className={`relative inline-flex h-[31px] w-[51px] shrink-0 cursor-pointer rounded-full p-[2px] transition-colors duration-200 ease-in-out focus:outline-none ${
+        checked ? activeBg : 'bg-[#E9E9EB] dark:bg-[#39393D]'
       }`}
-    />
-  </button>
-);
+    >
+      <span
+        className={`pointer-events-none inline-block h-[27px] w-[27px] transform rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,0.15),0_3px_1px_rgba(0,0,0,0.06)] transition-transform duration-200 ease-in-out ${
+          checked ? 'translate-x-[20px]' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  );
+};
 
 interface EnhancedMessage extends ChatMessage {
   sources?: { title: string; uri: string }[];
@@ -411,15 +418,15 @@ const App: React.FC = () => {
                 </span>
               </div>
               
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setShowConfig(true)}
-                  className="text-[#8E8E93] hover:text-white p-1"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-[#007AFF] hover:bg-[#007AFF]/10 active:scale-95 transition-all"
                   title="Settings"
                 >
                   <GearIcon className="w-5 h-5" />
                 </button>
-                <label className="text-zinc-900 dark:text-zinc-100 font-semibold text-[17px] cursor-pointer flex items-center gap-1 active:opacity-60">
+                <label className="w-8 h-8 rounded-lg flex items-center justify-center text-[#007AFF] hover:bg-[#007AFF]/10 cursor-pointer active:scale-95 transition-all" title="Add Document">
                   <input type="file" accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.html" multiple onChange={handleFileUpload} className="hidden" />
                   <PlusIcon className="w-5 h-5" />
                 </label>
@@ -557,7 +564,7 @@ const App: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <button
                     onClick={() => setMobileTab('library')}
-                    className="md:hidden text-zinc-900 dark:text-zinc-100 font-semibold text-[17px] flex items-center gap-0.5"
+                    className="md:hidden text-[#007AFF] font-medium text-[17px] flex items-center gap-0.5"
                   >
                     <ChevronLeft className="w-5 h-5" />
                     <span>Library</span>
@@ -569,9 +576,10 @@ const App: React.FC = () => {
 
                   <button
                     onClick={() => copyToClipboard(activePaper.compressedContext, 'top-copy')}
-                    className="text-zinc-900 dark:text-zinc-100 font-medium text-[15px]"
+                    className="text-[#007AFF] hover:opacity-80 active:opacity-60 font-medium text-[16px] flex items-center gap-1 transition-opacity"
                   >
-                    {copiedId === 'top-copy' ? 'Copied' : 'Copy'}
+                    {copiedId === 'top-copy' ? <CheckIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
+                    <span>{copiedId === 'top-copy' ? 'Copied' : 'Copy'}</span>
                   </button>
                 </div>
 
@@ -710,7 +718,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setMobileTab('reading')}
-                className="md:hidden text-zinc-900 dark:text-zinc-100 flex items-center gap-0.5 text-[17px]"
+                className="md:hidden text-[#007AFF] font-medium flex items-center gap-0.5 text-[17px]"
               >
                 <ChevronLeft className="w-5 h-5" />
                 <span>Paper</span>
@@ -898,7 +906,7 @@ const App: React.FC = () => {
               </div>
               <button
                 onClick={() => setShowConfig(false)}
-                className="text-zinc-900 dark:text-zinc-100 font-semibold text-[17px]"
+                className="text-[#007AFF] hover:opacity-80 active:opacity-60 font-semibold text-[17px] transition-opacity"
               >
                 Done
               </button>

@@ -1,181 +1,254 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DistillJar | Research Distiller</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>DistillJar</title>
+    <link rel="icon" type="image/svg+xml" href="/logo.svg">
+    <link rel="apple-touch-icon" href="/logo.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', '"Inter"', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+                    },
+                    colors: {
+                        ios: {
+                            systemBgDark: '#000000',
+                            secondaryBgDark: '#1C1C1E',
+                            tertiaryBgDark: '#2C2C2E',
+                            separatorDark: '#38383A',
+                            labelDark: '#FFFFFF',
+                            secondaryLabelDark: '#8E8E93',
+                            tertiaryLabelDark: '#48484A',
+                            
+                            systemBgLight: '#F2F2F7',
+                            secondaryBgLight: '#FFFFFF',
+                            tertiaryBgLight: '#E5E5EA',
+                            separatorLight: '#C6C6C8',
+                            labelLight: '#000000',
+                            secondaryLabelLight: '#8E8E93',
+                            tertiaryLabelLight: '#C7C7CC',
+
+                            blue: '#007AFF',
+                            teal: '#30B0C7',
+                            gray: '#8E8E93',
+                            gray2: '#AEAEB2',
+                            gray3: '#C7C7CC',
+                            gray4: '#D1D1D6',
+                            gray5: '#E5E5EA',
+                            gray6: '#F2F2F7',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap');
+        * {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --sat: env(safe-area-inset-top, 0px);
+            --sab: env(safe-area-inset-bottom, 0px);
+            --sal: env(safe-area-inset-left, 0px);
+            --sar: env(safe-area-inset-right, 0px);
+        }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #ffffff;
-            color: #000000;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", sans-serif;
             margin: 0;
             padding: 0;
+            font-size: 17px;
+            letter-spacing: -0.022em;
+            touch-action: manipulation;
+            overscroll-behavior: none;
         }
 
-        .serif {
-            font-family: 'Merriweather', serif;
+        /* iOS Translucent Blur Bars */
+        .ios-blur {
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
         }
 
-        /* Minimal Monochrome Scrollbar */
+        .dark .ios-nav-bg {
+            background: rgba(0, 0, 0, 0.75);
+            border-bottom: 0.5px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .ios-nav-bg {
+            background: rgba(242, 242, 247, 0.8);
+            border-bottom: 0.5px solid rgba(60, 60, 67, 0.2);
+        }
+
+        .dark .ios-tab-bg {
+            background: rgba(22, 22, 24, 0.85);
+            border-top: 0.5px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .ios-tab-bg {
+            background: rgba(255, 255, 255, 0.85);
+            border-top: 0.5px solid rgba(60, 60, 67, 0.2);
+        }
+
+        /* iOS Inset Grouped Cell */
+        .dark .ios-cell {
+            background: #1C1C1E;
+            color: #FFFFFF;
+        }
+
+        .ios-cell {
+            background: #FFFFFF;
+            color: #000000;
+        }
+
+        .dark .ios-cell:active {
+            background: #2C2C2E;
+        }
+
+        .ios-cell:active {
+            background: #E5E5EA;
+        }
+
+        /* Minimal iOS Scrollbar */
         ::-webkit-scrollbar {
-            width: 4px;
+            width: 5px;
+            height: 5px;
         }
 
         ::-webkit-scrollbar-track {
             background: transparent;
         }
 
-        ::-webkit-scrollbar-thumb {
-            background: #d4d4d4;
-            border-radius: 10px;
+        .dark ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 9999px;
         }
 
-        ::-webkit-scrollbar-thumb:hover {
-            background: #a3a3a3;
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 9999px;
         }
 
         ::selection {
-            background: #e5e5e5;
-            color: #000000;
+            background: #007AFF;
+            color: #ffffff;
         }
 
-        .prose-readable {
-            max-width: 65ch;
-            line-height: 1.8;
-        }
-
-        .fade-in {
-            animation: fadeIn 0.3s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(8px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* Monochrome Markdown Styling */
+        /* iOS Editorial Reading Typography */
         .markdown-content {
-            line-height: 1.6;
+            line-height: 1.8;
+            font-size: 1.0625rem; /* 17px */
+            letter-spacing: -0.018em;
         }
 
         .markdown-content p {
-            margin: 0.5em 0;
+            margin: 1.1em 0;
         }
 
         .markdown-content h1,
         .markdown-content h2,
         .markdown-content h3 {
             font-weight: 700;
-            margin: 1em 0 0.5em 0;
+            letter-spacing: -0.03em;
+            margin: 1.6em 0 0.5em 0;
+        }
+
+        .markdown-content h1 { font-size: 1.6em; line-height: 1.25; }
+        .markdown-content h2 { font-size: 1.35em; line-height: 1.3; }
+        .markdown-content h3 { font-size: 1.18em; line-height: 1.35; }
+
+        .dark .markdown-content h1,
+        .dark .markdown-content h2,
+        .dark .markdown-content h3 {
+            color: #FFFFFF;
+        }
+
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3 {
             color: #000000;
         }
 
-        .markdown-content h1 {
-            font-size: 1.4em;
+        .markdown-content code {
+            padding: 0.2em 0.45em;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.88em;
         }
 
-        .markdown-content h2 {
-            font-size: 1.2em;
-        }
-
-        .markdown-content h3 {
-            font-size: 1.1em;
+        .dark .markdown-content code {
+            background: #2C2C2E;
+            color: #FFFFFF;
         }
 
         .markdown-content code {
-            background: #f5f5f5;
-            border: 1px solid #e5e5e5;
-            padding: 0.15em 0.4em;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
+            background: #E5E5EA;
             color: #000000;
         }
 
         .markdown-content pre {
-            background: #f5f5f5;
-            border: 1px solid #d4d4d4;
-            border-radius: 4px;
-            padding: 1em;
+            border-radius: 14px;
+            padding: 1.25em 1.5em;
             overflow-x: auto;
-            margin: 0.5em 0;
+            margin: 1.3em 0;
+            font-size: 0.9em;
+        }
+
+        .dark .markdown-content pre {
+            background: #1C1C1E;
+        }
+
+        .markdown-content pre {
+            background: #E5E5EA;
         }
 
         .markdown-content pre code {
             background: transparent;
             border: none;
             padding: 0;
+            color: inherit;
         }
 
         .markdown-content ul,
         .markdown-content ol {
-            margin: 0.5em 0;
-            padding-left: 2em;
+            margin: 0.8em 0;
+            padding-left: 1.6em;
         }
 
         .markdown-content li {
-            margin: 0.25em 0;
+            margin: 0.4em 0;
         }
 
         .markdown-content blockquote {
-            border-left: 3px solid #000000;
-            margin: 0.5em 0;
-            padding-left: 1em;
-            color: #404040;
+            margin: 1.3em 0;
+            padding: 0.6em 0 0.6em 1.2em;
+            border-left: 3.5px solid #8E8E93;
+            border-radius: 0 10px 10px 0;
         }
 
-        .markdown-content table {
-            border-collapse: collapse;
-            margin: 0.5em 0;
-            width: 100%;
+        .dark .markdown-content blockquote {
+            background: #1C1C1E;
+            color: #8E8E93;
         }
 
-        .markdown-content th,
-        .markdown-content td {
-            border: 1px solid #d4d4d4;
-            padding: 0.5em;
-            text-align: left;
-        }
-
-        .markdown-content th {
-            background: #f5f5f5;
-            font-weight: 600;
-        }
-
-        .markdown-content a {
-            color: #000000;
-            text-decoration: underline;
-        }
-
-        .markdown-content a:hover {
-            color: #404040;
-        }
-
-        .markdown-content strong {
-            font-weight: 700;
-        }
-
-        .markdown-content em {
-            font-style: italic;
-        }
-
-        .markdown-content hr {
-            border: none;
-            border-top: 1px solid #d4d4d4;
-            margin: 1em 0;
+        .markdown-content blockquote {
+            background: #E5E5EA;
+            color: #636366;
         }
     </style>
     <script type="importmap">
@@ -188,10 +261,9 @@
   }
 }
 </script>
-    <link rel="stylesheet" href="/index.css">
 </head>
 
-<body>
+<body class="bg-black text-white antialiased">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
 </body>

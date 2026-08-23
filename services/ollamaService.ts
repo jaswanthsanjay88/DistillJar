@@ -23,6 +23,26 @@ const fetchWithRetry = async (url: string, options: RequestInit, retries = 3, ba
   }
 };
 
+export const checkOllamaStatus = async (baseUrl: string): Promise<{ online: boolean; models: string[]; latencyMs?: number; error?: string }> => {
+  const start = performance.now();
+  try {
+    const res = await fetch(`${baseUrl}/api/tags`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(3000)
+    });
+    const latencyMs = Math.round(performance.now() - start);
+    if (res.ok) {
+      const data = await res.json();
+      const models = Array.isArray(data.models) ? data.models.map((m: any) => m.name || m.model) : [];
+      return { online: true, models, latencyMs };
+    }
+    return { online: false, models: [], error: `HTTP ${res.status}: ${res.statusText}` };
+  } catch (err: any) {
+    return { online: false, models: [], error: err.message || 'Connection refused' };
+  }
+};
+
 const callOllama = async (prompt: string, system: string, contextWindow: number = 32768, config: OllamaConfig = DEFAULT_CONFIG) => {
   try {
     const response = await fetchWithRetry(`${config.baseUrl}/api/generate`, {

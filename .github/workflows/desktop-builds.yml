@@ -1,0 +1,58 @@
+name: Build Cross-Platform Desktop Apps (macOS, Windows, Linux)
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools libfuse2
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build and Package Desktop App (Windows)
+        if: runner.os == 'Windows'
+        run: npm run build:win
+
+      - name: Build and Package Desktop App (macOS)
+        if: runner.os == 'macOS'
+        run: npm run build:mac
+
+      - name: Build and Package Desktop App (Linux)
+        if: runner.os == 'Linux'
+        run: npm run build:linux
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DistillJar-${{ runner.os }}-Builds
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: warn

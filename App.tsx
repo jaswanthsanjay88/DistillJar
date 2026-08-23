@@ -421,12 +421,12 @@ const App: React.FC = () => {
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setShowConfig(true)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-[#8E8E93] hover:text-[#007AFF] hover:bg-[#007AFF]/10 active:scale-95 transition-all"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-[#007AFF] hover:bg-[#007AFF]/10 active:opacity-40 transition-all"
                   title="Settings"
                 >
                   <GearIcon className="w-5 h-5" />
                 </button>
-                <label className="w-8 h-8 rounded-lg flex items-center justify-center text-[#007AFF] hover:bg-[#007AFF]/10 cursor-pointer active:scale-95 transition-all" title="Add Document">
+                <label className="w-8 h-8 rounded-lg flex items-center justify-center text-[#007AFF] hover:bg-[#007AFF]/10 cursor-pointer active:opacity-40 transition-all" title="Add Document">
                   <input type="file" accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.html" multiple onChange={handleFileUpload} className="hidden" />
                   <PlusIcon className="w-5 h-5" />
                 </label>
@@ -460,9 +460,9 @@ const App: React.FC = () => {
               <div className="py-20 text-center flex flex-col items-center gap-3">
                 <DocIcon className="w-12 h-12 text-[#8E8E93]/40" />
                 <p className="text-[17px] text-[#8E8E93]">No Papers</p>
-                <label className="text-zinc-900 dark:text-zinc-100 font-semibold text-[15px] cursor-pointer active:opacity-60">
+                <label className="text-[#007AFF] font-medium text-[16px] cursor-pointer active:opacity-60">
                   <input type="file" accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.html" multiple onChange={handleFileUpload} className="hidden" />
-                  Upload PDF to Begin
+                  Upload Document to Begin
                 </label>
               </div>
             ) : (
@@ -551,7 +551,7 @@ const App: React.FC = () => {
               <p className="text-[15px] text-[#8E8E93] mb-6">Choose a paper from your library or upload a new PDF.</p>
               <button
                 onClick={() => setMobileTab('library')}
-                className="md:hidden px-6 py-2.5 rounded-full bg-[#EDEDEA] text-black dark:bg-[#EDEDEA] dark:text-black font-semibold text-[15px]"
+                className="md:hidden px-6 py-2.5 rounded-full bg-[#007AFF] text-white font-semibold text-[15px] shadow-sm active:opacity-75"
               >
                 Go to Library
               </button>
@@ -848,11 +848,11 @@ const App: React.FC = () => {
       {/* ========================================================================= */}
       {/* 4. MOBILE NATIVE iOS BOTTOM TAB BAR                                       */}
       {/* ========================================================================= */}
-      <nav className="md:hidden ios-blur ios-tab-bg flex items-center justify-around h-14 pb-safe shrink-0 z-40">
+      <nav className="md:hidden ios-blur ios-tab-bg flex items-center justify-around h-14 pb-safe shrink-0 z-40 border-t border-[#38383A]/30">
         <button
           onClick={() => setMobileTab('library')}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium ${
-            mobileTab === 'library' ? 'text-zinc-900 dark:text-zinc-100' : 'text-[#8E8E93]'
+          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors ${
+            mobileTab === 'library' ? 'text-[#007AFF]' : 'text-[#8E8E93]'
           }`}
         >
           <DocIcon className="w-6 h-6" />
@@ -861,8 +861,8 @@ const App: React.FC = () => {
 
         <button
           onClick={() => setMobileTab('reading')}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium ${
-            mobileTab === 'reading' ? 'text-zinc-900 dark:text-zinc-100' : 'text-[#8E8E93]'
+          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors ${
+            mobileTab === 'reading' ? 'text-[#007AFF]' : 'text-[#8E8E93]'
           }`}
         >
           <BookIcon className="w-6 h-6" />
@@ -871,8 +871,8 @@ const App: React.FC = () => {
 
         <button
           onClick={() => setMobileTab('assistant')}
-          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium ${
-            mobileTab === 'assistant' ? 'text-zinc-900 dark:text-zinc-100' : 'text-[#8E8E93]'
+          className={`flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors ${
+            mobileTab === 'assistant' ? 'text-[#007AFF]' : 'text-[#8E8E93]'
           }`}
         >
           <BubbleIcon className="w-6 h-6" />
@@ -881,7 +881,7 @@ const App: React.FC = () => {
 
         <button
           onClick={() => setShowConfig(true)}
-          className="flex flex-col items-center gap-0.5 text-[10px] font-medium text-[#8E8E93]"
+          className="flex flex-col items-center gap-0.5 text-[10px] font-medium text-[#8E8E93] active:text-[#007AFF] transition-colors"
         >
           <GearIcon className="w-6 h-6" />
           <span>Settings</span>
